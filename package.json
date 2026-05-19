@@ -1,0 +1,42 @@
+{
+  "displayName": "Homebridge RF Converter",
+  "name": "homebridge-rf-converter",
+  "version": "0.1.0",
+  "description": "Homebridge plugin for the RF Converter V3.0 (Safemate). Exposes RF remote buttons as HomeKit outlets.",
+  "license": "MIT",
+  "type": "commonjs",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "rimraf ./dist && tsc",
+    "prepublishOnly": "npm run build",
+    "watch": "npm run build && nodemon"
+  },
+  "keywords": [
+    "homebridge-plugin",
+    "rf-converter",
+    "safemate",
+    "rf",
+    "433mhz"
+  ],
+  "engines": {
+    "node": "^18.20.4 || ^20.15.1 || ^22.0.0",
+    "homebridge": "^1.8.0 || ^2.0.0-beta.0"
+  },
+  "dependencies": {
+    "@homebridge/plugin-ui-utils": "^1.0.3"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.30",
+    "homebridge": "^1.8.0",
+    "nodemon": "^3.1.0",
+    "rimraf": "^5.0.5",
+    "typescript": "^5.4.3"
+  },
+  "files": [
+    "dist",
+    "config.schema.json",
+    "homebridge-ui",
+    "LICENSE",
+    "README.md"
+  ]
+}

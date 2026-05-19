@@ -1,0 +1,75 @@
+{
+  "pluginAlias": "RFConverter",
+  "pluginType": "platform",
+  "singular": true,
+  "customUi": true,
+  "headerDisplay": "Homebridge plugin for the RF Converter V3.0 (Safemate). Use the custom UI to fetch remotes from your Safemate account and map keys to HomeKit outlets.",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "name": {
+        "title": "Platform Name",
+        "type": "string",
+        "default": "RF Converter",
+        "required": true
+      },
+      "account": {
+        "title": "Safemate Account",
+        "type": "string",
+        "description": "Your Safemate account username (used to pull remote configurations from the cloud)."
+      },
+      "useAndroidClient": {
+        "title": "Use Android client signature",
+        "type": "boolean",
+        "default": true,
+        "description": "Uncheck to use the iOS client signature instead. Most users should leave this on."
+      },
+      "remotes": {
+        "title": "Remotes",
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "name":      { "title": "Remote Name", "type": "string", "required": true },
+            "ip":        { "title": "Device IP",   "type": "string", "required": true },
+            "mac":       { "title": "Device MAC",  "type": "string", "required": true },
+            "type":      { "title": "Device Type", "type": "integer", "required": true },
+            "project":   { "title": "Project",     "type": "integer", "required": true },
+            "id":        { "title": "Remote ID",   "type": "integer", "required": true },
+            "frequency": { "title": "Frequency",   "type": "integer", "required": true },
+            "keys": {
+              "title": "Keys",
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name":  { "title": "Key Name", "type": "string", "required": true },
+                  "value": { "title": "Key Value", "type": "integer", "required": true }
+                }
+              }
+            }
+          }
+        }
+      },
+      "outlets": {
+        "title": "Outlets",
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "name":   { "title": "Outlet Name", "type": "string", "required": true },
+            "remote": { "title": "Remote Name", "type": "string", "required": true },
+            "onKey":  { "title": "ON Key",  "type": "string", "required": true },
+            "offKey": { "title": "OFF Key", "type": "string" },
+            "stateful": {
+              "title": "Stateful",
+              "type": "boolean",
+              "default": true,
+              "description": "If checked, the outlet remembers ON/OFF state. If unchecked, treats both states as momentary button presses."
+            }
+          }
+        }
+      }
+    }
+  }
+}

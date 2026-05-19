@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>RF Converter</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      padding: 0;
+      margin: 0;
+    }
+    .container { padding: 12px 4px; }
+    h2 { margin: 0 0 4px 0; }
+    h3 { margin: 16px 0 8px 0; }
+    .muted { color: #888; font-size: 0.9em; }
+    .step { display: none; }
+    .step.active { display: block; }
+    .row {
+      display: flex;
+      gap: 8px;
+      align-items: flex-end;
+      margin-bottom: 8px;
+      flex-wrap: wrap;
+    }
+    .row > * { flex: 1 1 120px; }
+    .row > button { flex: 0 0 auto; }
+    label { display: block; font-size: 0.85em; margin-bottom: 2px; color: #666; }
+    input, select {
+      width: 100%;
+      padding: 6px 8px;
+      box-sizing: border-box;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      font-size: 0.95em;
+    }
+    button {
+      padding: 6px 12px;
+      border-radius: 4px;
+      border: 1px solid transparent;
+      background: #4a90e2;
+      color: white;
+      cursor: pointer;
+      font-size: 0.95em;
+    }
+    button.secondary {
+      background: transparent;
+      color: #4a90e2;
+      border: 1px solid #4a90e2;
+    }
+    button.danger {
+      background: transparent;
+      color: #c0392b;
+      border: 1px solid #c0392b;
+    }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    .card {
+      border: 1px solid #e0e0e0;
+      border-radius: 6px;
+      padding: 12px;
+      margin-bottom: 8px;
+      background: #fafafa;
+    }
+    .nav {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 16px;
+      padding-top: 12px;
+      border-top: 1px solid #eee;
+    }
+    .pill {
+      display: inline-block;
+      font-size: 0.8em;
+      padding: 2px 8px;
+      border-radius: 10px;
+      background: #eef;
+      color: #335;
+      margin-right: 6px;
+    }
+    .key-pill {
+      display: inline-block;
+      font-size: 0.85em;
+      padding: 3px 8px;
+      border-radius: 10px;
+      background: #e8f4fd;
+      color: #2a5d8f;
+      margin: 2px;
+    }
+    .error { color: #c0392b; font-size: 0.9em; margin-top: 6px; }
+    .ok { color: #27ae60; font-size: 0.9em; margin-top: 6px; }
+    .hint { font-size: 0.85em; color: #888; margin-top: 4px; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { text-align: left; padding: 6px 4px; border-bottom: 1px solid #eee; font-size: 0.9em; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px; }
+  </style>
+</head>
+<body>
+<div class="container">
+
+  <div id="step-welcome" class="step active">
+    <h2>RF Converter setup</h2>
+    <p class="muted">This plugin maps RF remote buttons to HomeKit outlets via your RF Converter V3.0 device.</p>
+    <h3>Step 1 &mdash; load your remotes</h3>
+    <p class="muted">Pull remotes automatically from your Safemate account, or enter them manually if you don&rsquo;t have one.</p>
+    <div class="nav">
+      <span></span>
+      <div>
+        <button class="secondary" id="btn-manual">Manual entry</button>
+        <button id="btn-cloud">Use Safemate account</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="step-cloud" class="step">
+    <h2>Fetch from Safemate</h2>
+    <div class="row">
+      <div style="flex: 2 1 200px">
+        <label>Safemate account</label>
+        <input id="account" type="text" placeholder="e.g. user@example.com" />
+      </div>
+      <div style="flex: 0 0 auto">
+        <label>Client</label>
+        <select id="client">
+          <option value="android" selected>Android</option>
+          <option value="ios">iOS</option>
+        </select>
+      </div>
+      <button id="btn-fetch">Fetch</button>
+    </div>
+    <div id="fetch-msg"></div>
+    <div id="fetch-result"></div>
+    <div class="nav">
+      <button class="secondary" data-back="welcome">&larr; Back</button>
+      <button id="btn-cloud-next" disabled>Next: map outlets &rarr;</button>
+    </div>
+  </div>
+
+  <div id="step-manual" class="step">
+    <h2>Enter remotes manually</h2>
+    <p class="muted">Add each remote, its device IP/MAC, and the available keys.</p>
+    <div id="manual-remotes"></div>
+    <button class="secondary" id="btn-add-remote">+ Add remote</button>
+    <div class="nav">
+      <button class="secondary" data-back="welcome">&larr; Back</button>
+      <button id="btn-manual-next">Next: map outlets &rarr;</button>
+    </div>
+  </div>
+
+  <div id="step-outlets" class="step">
+    <h2>Map outlets</h2>
+    <p class="muted">Each outlet appears in HomeKit. Pick which remote it controls and which key to press for ON/OFF.</p>
+    <div id="outlet-list"></div>
+    <button class="secondary" id="btn-add-outlet">+ Add outlet</button>
+    <div class="nav">
+      <button class="secondary" id="btn-outlets-back">&larr; Back</button>
+      <button id="btn-save">Save</button>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  (async () => {
+    let config = (await homebridge.getPluginConfig())[0] || {};
+    config.platform = 'RFConverter';
+    config.name = config.name || 'RF Converter';
+    config.remotes = Array.isArray(config.remotes) ? config.remotes : [];
+    config.outlets = Array.isArray(config.outlets) ? config.outlets : [];
+
+    homebridge.hideSchemaForm();
+
+    const steps = ['welcome', 'cloud', 'manual', 'outlets'];
+    function show(name) {
+      steps.forEach(s => document.getElementById('step-' + s).classList.remove('active'));
+      document.getElementById('step-' + name).classList.add('active');
+    }
+
+    // If already configured, jump straight to outlet mapping.
+    if (config.remotes.length > 0) {
+      renderOutlets();
+      show('outlets');
+    }
+
+    document.querySelectorAll('[data-back]').forEach(btn => {
+      btn.addEventListener('click', () => show(btn.getAttribute('data-back')));
+    });
+
+    document.getElementById('btn-cloud').addEventListener('click', () => {
+      document.getElementById('account').value = config.account || '';
+      document.getElementById('client').value = config.useAndroidClient === false ? 'ios' : 'android';
+      show('cloud');
+    });
+    document.getElementById('btn-manual').addEventListener('click', () => {
+      if (config.remotes.length === 0) addManualRemote();
+      renderManualRemotes();
+      show('manual');
+    });
+
+    // -------- Cloud fetch --------
+    document.getElementById('btn-fetch').addEventListener('click', async () => {
+      const account = document.getElementById('account').value.trim();
+      const useAndroid = document.getElementById('client').value === 'android';
+      const msg = document.getElementById('fetch-msg');
+      const out = document.getElementById('fetch-result');
+      if (!account) {
+        msg.innerHTML = '<div class="error">Enter your Safemate account first.</div>';
+        return;
+      }
+      msg.innerHTML = '<div class="muted">Fetching from Safemate&hellip;</div>';
+      out.innerHTML = '';
+      document.getElementById('btn-cloud-next').disabled = true;
+      try {
+        const res = await homebridge.request('/fetch-remotes', { account, useAndroid });
+        const remotes = res.remotes || [];
+        if (remotes.length === 0) {
+          msg.innerHTML = '<div class="error">No remotes returned from Safemate. Did you add any remotes in the app?</div>';
+          return;
+        }
+        config.account = account;
+        config.useAndroidClient = useAndroid;
+        config.remotes = remotes;
+        msg.innerHTML = `<div class="ok">Loaded ${remotes.length} remote${remotes.length === 1 ? '' : 's'}.</div>`;
+        out.innerHTML = remotes.map(r => `
+          <div class="card">
+            <div><strong>${escape(r.name)}</strong>
+              <span class="pill">${escape(r.ip)}</span>
+              <span class="pill">${escape(r.mac)}</span>
+            </div>
+            <div style="margin-top:6px">${r.keys.map(k => `<span class="key-pill">${escape(k.name)}</span>`).join('')}</div>
+          </div>
+        `).join('');
+        document.getElementById('btn-cloud-next').disabled = false;
+      } catch (err) {
+        msg.innerHTML = `<div class="error">${escape(err.message || String(err))}</div>`;
+      }
+    });
+
+    document.getElementById('btn-cloud-next').addEventListener('click', () => {
+      renderOutlets();
+      show('outlets');
+    });
+
+    // -------- Manual entry --------
+    function addManualRemote() {
+      config.remotes.push({
+        name: '', ip: '', mac: '', type: 0, project: 0, id: 0, frequency: 0,
+        keys: [{ name: '', value: 0 }],
+      });
+    }
+
+    function renderManualRemotes() {
+      const root = document.getElementById('manual-remotes');
+      root.innerHTML = '';
+      config.remotes.forEach((r, ri) => {
+        const div = document.createElement('div');
+        div.className = 'card';
+        div.innerHTML = `
+          <div class="row">
+            <div><label>Remote name</label><input data-f="name" value="${escape(r.name)}" /></div>
+            <div><label>Device IP</label><input data-f="ip" value="${escape(r.ip)}" placeholder="192.168.1.x" /></div>
+            <div><label>Device MAC</label><input data-f="mac" value="${escape(r.mac)}" placeholder="aa:bb:cc:dd:ee:ff" /></div>
+          </div>
+          <div class="row">
+            <div><label>Type</label><input data-f="type" type="number" value="${r.type ?? 0}" /></div>
+            <div><label>Project</label><input data-f="project" type="number" value="${r.project ?? 0}" /></div>
+            <div><label>Remote ID</label><input data-f="id" type="number" value="${r.id ?? 0}" /></div>
+            <div><label>Frequency</label><input data-f="frequency" type="number" value="${r.frequency ?? 0}" /></div>
+          </div>
+          <label>Keys</label>
+          <div data-keys></div>
+          <button class="secondary" data-action="add-key">+ Add key</button>
+          <button class="danger" style="float:right" data-action="remove-remote">Remove remote</button>
+          <div style="clear:both"></div>
+        `;
+
+        div.querySelectorAll('input[data-f]').forEach(input => {
+          input.addEventListener('input', () => {
+            const field = input.getAttribute('data-f');
+            r[field] = (input.type === 'number') ? Number(input.value) : input.value;
+          });
+        });
+
+        const keysRoot = div.querySelector('[data-keys]');
+        function renderKeys() {
+          keysRoot.innerHTML = '';
+          (r.keys || []).forEach((k, ki) => {
+            const krow = document.createElement('div');
+            krow.className = 'row';
+            krow.innerHTML = `
+              <div><label>Name</label><input data-k="name" value="${escape(k.name)}" /></div>
+              <div><label>Value</label><input data-k="value" type="number" value="${k.value ?? 0}" /></div>
+              <button class="danger" data-action="remove-key">&times;</button>
+            `;
+            krow.querySelectorAll('input[data-k]').forEach(input => {
+              input.addEventListener('input', () => {
+                const field = input.getAttribute('data-k');
+                k[field] = (input.type === 'number') ? Number(input.value) : input.value;
+              });
+            });
+            krow.querySelector('[data-action="remove-key"]').addEventListener('click', () => {
+              r.keys.splice(ki, 1); renderKeys();
+            });
+            keysRoot.appendChild(krow);
+          });
+        }
+        renderKeys();
+
+        div.querySelector('[data-action="add-key"]').addEventListener('click', () => {
+          r.keys = r.keys || [];
+          r.keys.push({ name: '', value: 0 });
+          renderKeys();
+        });
+        div.querySelector('[data-action="remove-remote"]').addEventListener('click', () => {
+          config.remotes.splice(ri, 1);
+          renderManualRemotes();
+        });
+
+        root.appendChild(div);
+      });
+    }
+
+    document.getElementById('btn-add-remote').addEventListener('click', () => {
+      addManualRemote();
+      renderManualRemotes();
+    });
+    document.getElementById('btn-manual-next').addEventListener('click', () => {
+      const bad = config.remotes.find(r => !r.name || !r.ip || !r.mac);
+      if (bad) {
+        homebridge.toast.error('Each remote needs at least a name, IP, and MAC.');
+        return;
+      }
+      renderOutlets();
+      show('outlets');
+    });
+
+    // -------- Outlets --------
+    document.getElementById('btn-outlets-back').addEventListener('click', () => {
+      show(config.account ? 'cloud' : 'manual');
+    });
+
+    function renderOutlets() {
+      const root = document.getElementById('outlet-list');
+      root.innerHTML = '';
+      if (config.outlets.length === 0) {
+        root.innerHTML = '<p class="muted">No outlets yet &mdash; add one below.</p>';
+      }
+      config.outlets.forEach((o, oi) => {
+        const remote = config.remotes.find(r => r.name === o.remote);
+        const keys = remote ? remote.keys.map(k => k.name) : [];
+
+        const div = document.createElement('div');
+        div.className = 'card';
+        div.innerHTML = `
+          <div class="row">
+            <div><label>Outlet name</label><input data-f="name" value="${escape(o.name)}" placeholder="e.g. Living Room Lamp" /></div>
+            <div><label>Remote</label>
+              <select data-f="remote">
+                <option value="">&mdash; pick a remote &mdash;</option>
+                ${config.remotes.map(r => `<option value="${escape(r.name)}" ${r.name === o.remote ? 'selected' : ''}>${escape(r.name)}</option>`).join('')}
+              </select>
+            </div>
+          </div>
+          <div class="row">
+            <div><label>ON key</label>
+              <select data-f="onKey">
+                <option value="">&mdash;</option>
+                ${keys.map(k => `<option value="${escape(k)}" ${k === o.onKey ? 'selected' : ''}>${escape(k)}</option>`).join('')}
+              </select>
+            </div>
+            <div><label>OFF key (optional)</label>
+              <select data-f="offKey">
+                <option value="">&mdash; same as ON (momentary) &mdash;</option>
+                ${keys.map(k => `<option value="${escape(k)}" ${k === o.offKey ? 'selected' : ''}>${escape(k)}</option>`).join('')}
+              </select>
+            </div>
+          </div>
+          <div class="row">
+            <label style="flex:1"><input data-f="stateful" type="checkbox" ${o.stateful !== false ? 'checked' : ''} /> Stateful (remembers ON/OFF in HomeKit)</label>
+            <button class="secondary" data-action="test-on" ${remote && o.onKey ? '' : 'disabled'}>Test ON</button>
+            <button class="secondary" data-action="test-off" ${remote && o.offKey ? '' : 'disabled'}>Test OFF</button>
+            <button class="danger" data-action="remove">Remove</button>
+          </div>
+        `;
+
+        div.querySelectorAll('[data-f]').forEach(el => {
+          el.addEventListener('input', () => {
+            const f = el.getAttribute('data-f');
+            if (el.type === 'checkbox') o[f] = el.checked;
+            else o[f] = el.value || undefined;
+            if (f === 'remote') renderOutlets();
+          });
+          el.addEventListener('change', () => {
+            const f = el.getAttribute('data-f');
+            if (el.tagName === 'SELECT') {
+              o[f] = el.value || undefined;
+              if (f === 'remote') renderOutlets();
+            }
+          });
+        });
+
+        div.querySelector('[data-action="remove"]').addEventListener('click', () => {
+          config.outlets.splice(oi, 1);
+          renderOutlets();
+        });
+        div.querySelector('[data-action="test-on"]').addEventListener('click', () => testKey(o, 'on'));
+        div.querySelector('[data-action="test-off"]').addEventListener('click', () => testKey(o, 'off'));
+
+        root.appendChild(div);
+      });
+    }
+
+    async function testKey(outlet, which) {
+      const remote = config.remotes.find(r => r.name === outlet.remote);
+      const keyName = which === 'on' ? outlet.onKey : outlet.offKey;
+      if (!remote || !keyName) {
+        homebridge.toast.error('Pick a remote and key first.');
+        return;
+      }
+      try {
+        await homebridge.request('/test-key', { remote, keyName });
+        homebridge.toast.success(`Sent "${keyName}" to ${remote.name}`);
+      } catch (err) {
+        homebridge.toast.error(err.message || String(err));
+      }
+    }
+
+    document.getElementById('btn-add-outlet').addEventListener('click', () => {
+      config.outlets.push({ name: '', remote: '', onKey: '', stateful: true });
+      renderOutlets();
+    });
+
+    // -------- Save --------
+    document.getElementById('btn-save').addEventListener('click', async () => {
+      // sanity
+      const bad = config.outlets.find(o => !o.name || !o.remote || !o.onKey);
+      if (bad) {
+        homebridge.toast.error('Every outlet needs a name, remote, and ON key.');
+        return;
+      }
+      try {
+        await homebridge.updatePluginConfig([config]);
+        await homebridge.savePluginConfig();
+        homebridge.toast.success('Configuration saved. Restart Homebridge to apply.');
+      } catch (err) {
+        homebridge.toast.error(err.message || String(err));
+      }
+    });
+
+    function escape(s) {
+      return String(s ?? '').replace(/[&<>"']/g, c => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+      }[c]));
+    }
+  })();
+</script>
+</body>
+</html>
