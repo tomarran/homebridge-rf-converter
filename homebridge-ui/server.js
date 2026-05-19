@@ -41,8 +41,21 @@ async function cloudPost(path, body, useAndroid) {
     headers: client.headers,
     body: toForm(body),
   });
-  if (!res.ok) throw new Error(`HTTP ${res.status} on ${path}`);
-  return res.json();
+  const text = await res.text();
+  if (!res.ok) {
+    const err = new Error(`HTTP ${res.status} on ${path} — body: ${text.slice(0, 300)}`);
+    err.raw = text;
+    throw err;
+  }
+  try {
+    const json = JSON.parse(text);
+    json._raw = text;
+    return json;
+  } catch (_) {
+    const err = new Error(`Non-JSON response on ${path}: ${text.slice(0, 300)}`);
+    err.raw = text;
+    throw err;
+  }
 }
 
 function crc8(buf, length) {
@@ -145,19 +158,29 @@ class UiServer extends HomebridgePluginUiServer {
     if (!account || typeof account !== 'string') {
       throw new RequestError('Account is required.', { status: 400 });
     }
+    const trimmed = account.trim();
     try {
       const useAnd = useAndroid !== false;
       const client = useAnd ? ANDROID : IOS;
       const devices = await cloudPost('get_all_device_data.php',
-        { account, security_code: client.security_code }, useAnd);
+        { account: trimmed, security_code: client.security_code }, useAnd);
       if (devices.result !== 0) {
-        throw new RequestError(`Safemate returned result=${devices.result} when fetching devices. Check the account name.`, { status: 400 });
+        const msg = typeof devices.message === 'string' ? devices.message : null;
+        const hint = devices.result === 1
+          ? ` This usually means the account string doesn't match what's in the Safemate app — try the iOS client toggle, check for typos / whitespace, or confirm the account has at least one device paired in the app.`
+          : '';
+        throw new RequestError(
+          `Safemate returned result=${devices.result}${msg ? ` ("${msg}")` : ''}.${hint}\nRaw: ${String(devices._raw || '').slice(0, 400)}`,
+          { status: 400 },
+        );
       }
       const remotes = [];
+      let totalRemotesFromCloud = 0;
       for (const device of devices.message || []) {
         const rs = await cloudPost('get_remote_controller.php',
           { mac: device.mac, security_code: client.security_code }, useAnd);
         if (rs.result !== 0) continue;
+        totalRemotesFromCloud += (rs.message || []).length;
         for (const r of rs.message || []) {
           remotes.push({
             name: r.r_name,
@@ -171,7 +194,7 @@ class UiServer extends HomebridgePluginUiServer {
           });
         }
       }
-      return { remotes };
+      return { remotes, deviceCount: (devices.message || []).length, totalRemotesFromCloud };
     } catch (err) {
       if (err instanceof RequestError) throw err;
       throw new RequestError(`Failed to fetch from Safemate: ${err.message}`, { status: 500 });

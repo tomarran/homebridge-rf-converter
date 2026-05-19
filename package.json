@@ -1,7 +1,7 @@
 {
   "displayName": "Homebridge RF Converter",
   "name": "homebridge-rf-converter",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Homebridge plugin for the RF Converter V3.0 (Safemate). Exposes RF remote buttons as HomeKit outlets.",
   "license": "MIT",
   "type": "commonjs",
