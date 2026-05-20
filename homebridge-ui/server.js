@@ -154,14 +154,35 @@ class UiServer extends HomebridgePluginUiServer {
     this.ready();
   }
 
-  async fetchRemotes({ account, useAndroid }) {
+  async fetchRemotes({ account, useAndroid, password }) {
     if (!account || typeof account !== 'string') {
       throw new RequestError('Account is required.', { status: 400 });
     }
     const trimmed = account.trim();
     try {
-      const useAnd = useAndroid !== false;
+      const useAnd = useAndroid === true; // default = iOS now
       const client = useAnd ? ANDROID : IOS;
+
+      // Optional: log in first to establish a server-side session
+      if (password) {
+        const login = await cloudPost('user_login.php', {
+          account: trimmed,
+          password,
+          security_code: client.security_code,
+          app_type: '1',
+          app_version: '2.2.11',
+          current_date: new Date().toISOString().slice(0, 19).replace('T', ' '),
+          devicetoken: '',
+        }, useAnd);
+        if (login.result !== 0) {
+          const msg = typeof login.message === 'string' ? ` ("${login.message}")` : '';
+          throw new RequestError(
+            `Login failed: result=${login.result}, errno=${login.errno ?? '?'}${msg}.\nRaw: ${String(login._raw || '').slice(0, 400)}`,
+            { status: 400 },
+          );
+        }
+      }
+
       const devices = await cloudPost('get_all_device_data.php',
         { account: trimmed, security_code: client.security_code }, useAnd);
       if (devices.result !== 0) {

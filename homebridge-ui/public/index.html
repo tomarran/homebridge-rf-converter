@@ -115,17 +115,22 @@
     <div class="row">
       <div style="flex: 2 1 200px">
         <label>Safemate account</label>
-        <input id="account" type="text" placeholder="e.g. user@example.com" />
+        <input id="account" type="text" placeholder="phone number or email" autocomplete="username" />
+      </div>
+      <div style="flex: 2 1 160px">
+        <label>Password <span class="muted">(optional)</span></label>
+        <input id="password" type="password" placeholder="only needed for some accounts" autocomplete="current-password" />
       </div>
       <div style="flex: 0 0 auto">
         <label>Client</label>
         <select id="client">
-          <option value="android" selected>Android</option>
-          <option value="ios">iOS</option>
+          <option value="ios" selected>iOS</option>
+          <option value="android">Android</option>
         </select>
       </div>
       <button id="btn-fetch">Fetch</button>
     </div>
+    <p class="hint">Try without a password first. If you get <code>errno:17</code>, add your Safemate password — some accounts require a login session before the device list is returned.</p>
     <div id="fetch-msg"></div>
     <div id="fetch-result"></div>
     <div class="nav">
@@ -186,7 +191,8 @@
 
     document.getElementById('btn-cloud').addEventListener('click', () => {
       document.getElementById('account').value = config.account || '';
-      document.getElementById('client').value = config.useAndroidClient === false ? 'ios' : 'android';
+      // Default to iOS unless the saved config explicitly chose Android
+      document.getElementById('client').value = config.useAndroidClient === true ? 'android' : 'ios';
       show('cloud');
     });
     document.getElementById('btn-manual').addEventListener('click', () => {
@@ -198,6 +204,7 @@
     // -------- Cloud fetch --------
     document.getElementById('btn-fetch').addEventListener('click', async () => {
       const account = document.getElementById('account').value.trim();
+      const password = document.getElementById('password').value;
       const useAndroid = document.getElementById('client').value === 'android';
       const msg = document.getElementById('fetch-msg');
       const out = document.getElementById('fetch-result');
@@ -209,7 +216,7 @@
       out.innerHTML = '';
       document.getElementById('btn-cloud-next').disabled = true;
       try {
-        const res = await homebridge.request('/fetch-remotes', { account, useAndroid });
+        const res = await homebridge.request('/fetch-remotes', { account, useAndroid, password: password || undefined });
         const remotes = res.remotes || [];
         if (remotes.length === 0) {
           msg.innerHTML = '<div class="error">No remotes returned from Safemate. Did you add any remotes in the app?</div>';
